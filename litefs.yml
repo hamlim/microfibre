@@ -21,7 +21,7 @@ exit-on-error: false
 # for applications that use a single SQLite database.
 proxy:
   addr: ":8080"
-  target: "localhost:8088"
+  target: "0.0.0.0:8088"
   db: "microfibre.db"
   passthrough: 
     - "*.ico"
