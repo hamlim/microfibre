@@ -12,6 +12,7 @@ primary_region = "bos"
 
 [env]
   PORT = "8080"
+  HOST = "0.0.0.0:8080"
 
 [mounts]
   source = "data"

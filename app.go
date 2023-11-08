@@ -32,6 +32,13 @@ func main() {
 		dbFilePath = "./data/microfibre.db"
 	}
 
+	// Get the host from the environment
+	host := os.Getenv("HOST")
+	if host == "" {
+		// Fallback to localhost:8080 for local dev
+		host = "127.0.0.1:8080"
+	}
+
 	db, err := sql.Open("sqlite3", dbFilePath)
 	if err != nil {
 		log.Fatal(err, dbFilePath)
@@ -127,5 +134,10 @@ func main() {
 		})
 	})
 
-	r.Run(":8080")
+	r.GET("/", func (c *gin.Context) {
+		c.Header("Content-Type", "text/html");
+		c.String(http.StatusOK, "<html><body><marquee>Hello World!</marquee></body></html>");
+	})
+
+	r.Run(host)
 }
