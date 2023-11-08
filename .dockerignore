@@ -1,0 +1,6 @@
+# flyctl launch added from .gitignore
+**/go-example
+**/litefs
+**/data
+**/tmp
+fly.toml
