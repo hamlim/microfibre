@@ -5,9 +5,6 @@ FROM golang:1.21.4 as builder
 WORKDIR /go/src/github.com/hamlim/microfibre
 COPY . .
 
-ENV DB_FILE_PATH=/litefs/microfibre.db
-ENV GIN_MODE=release
-
 # Build the app
 RUN CGO_ENABLED=0 GOOS=linux go build -v -o app
 
@@ -19,6 +16,9 @@ RUN apk add --no-cache ca-certificates fuse3 sqlite
 COPY --from=builder /go/src/github.com/hamlim/microfibre/app /app
 # Copy litefs binary
 COPY --from=flyio/litefs:0.5 /usr/local/bin/litefs /usr/local/bin/litefs
+
+ENV DB_FILE_PATH=/litefs/microfibre.db
+ENV GIN_MODE=release
 
 # Run the app when the vm starts
 CMD ["litefs mount"]
