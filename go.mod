@@ -1,3 +1,3 @@
-module github.com/fly-apps/go-example
+module github.com/hamlim/microfibre
 
 go 1.21.4
