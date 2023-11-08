@@ -39,6 +39,8 @@ func main() {
 		host = "127.0.0.1:8080"
 	}
 
+	log.Printf("Started with env, host = %s, db = %s", host, dbFilePath)
+
 	db, err := sql.Open("sqlite3", dbFilePath)
 	if err != nil {
 		log.Fatal(err, dbFilePath)
