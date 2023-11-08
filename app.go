@@ -5,6 +5,8 @@ import (
 
 	"database/sql"
 	"log"
+	"os"
+
 	"net/http"
 
 	"time"
@@ -25,7 +27,13 @@ func main() {
 
 	r := gin.Default()
 
-	db, err := sql.Open("sqlite3", "microfibre.db")
+	// Get the database file path from the environment variable
+	dbFilePath := os.Getenv("DB_FILE_PATH")
+	if dbFilePath == "" {
+			dbFilePath = "./litefs/microfibre.db" // Default path for local development
+	}
+
+	db, err := sql.Open("sqlite3", dbFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,5 +128,5 @@ func main() {
 		})
 	})
 
-	r.Run(":8080")
+	r.Run(":8088")
 }

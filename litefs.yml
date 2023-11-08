@@ -22,7 +22,7 @@ exit-on-error: false
 proxy:
   addr: ":8080"
   target: "localhost:8088"
-  db: "db"
+  db: "microfibre.db"
   passthrough: 
     - "*.ico"
     - "*.png"

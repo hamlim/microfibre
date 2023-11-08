@@ -17,5 +17,7 @@ COPY --from=builder /go/src/github.com/hamlim/microfibre/app /app
 # Copy litefs binary
 COPY --from=flyio/litefs:0.5 /usr/local/bin/litefs /usr/local/bin/litefs
 
+ENV DB_FILE_PATH=/litefs/microfibre.db
+
 # Run the app when the vm starts
 CMD ["litefs mount"]
