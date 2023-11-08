@@ -11,14 +11,10 @@ primary_region = "bos"
   buildpacks = ["gcr.io/paketo-buildpacks/go"]
 
 [env]
-  PORT = "8088"
-
-[[services]]
-  internal_port = 8080
-  protocol = "tcp"
+  PORT = "8080"
 
 [http_service]
-  internal_port = 8088
+  internal_port = 8080
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
@@ -26,5 +22,7 @@ primary_region = "bos"
   processes = ["app"]
 
 [mounts]
-  source = "litefs"
-  destination = "/var/lib/litefs"
+  source = "data"
+  destination = "/data"
+  # source = "litefs"
+  # destination = "/var/lib/litefs"

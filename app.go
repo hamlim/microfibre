@@ -1,8 +1,6 @@
 package main
 
 import (
-	// "embed"
-
 	"database/sql"
 	"log"
 	"os"
@@ -16,7 +14,7 @@ import (
 )
 
 type StatusUpdate struct {
-	ID           int       `json:"id"`
+	ID          int        `json:"id"`
 	Body        string     `json:"body" binding:"required"`
 	UpdatedTime *time.Time `json:"updated_time"`
 	CreatedTime time.Time  `json:"created_time" binding:"required"`
@@ -30,7 +28,8 @@ func main() {
 	// Get the database file path from the environment variable
 	dbFilePath := os.Getenv("DB_FILE_PATH")
 	if dbFilePath == "" {
-			dbFilePath = "./litefs/microfibre.db" // Default path for local development
+		// Default path for local development
+		dbFilePath = "./data/microfibre.db"
 	}
 
 	db, err := sql.Open("sqlite3", dbFilePath)
@@ -128,5 +127,5 @@ func main() {
 		})
 	})
 
-	r.Run("0.0.0.0:8088")
+	r.Run(":8080")
 }
