@@ -35,7 +35,7 @@ func main() {
 
 	db, err := sql.Open("sqlite3", dbFilePath)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err, dbFilePath)
 	}
 	defer db.Close()
 
