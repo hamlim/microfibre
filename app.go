@@ -62,9 +62,7 @@ func main() {
 	}
 	log.Println("Database created successfully")
 
-	r.Use(conditionalValidationMiddleware())
-
-	r.GET("/updates", func(c *gin.Context) {
+	r.GET("/read", func(c *gin.Context) {
 		// Implement the logic to retrieve status updates from the database
 		rows, err := db.Query("SELECT id, body, updated_time, created_time, location FROM status_updates")
 		if err != nil {
@@ -101,20 +99,20 @@ func main() {
 	r.POST("/create", func(c *gin.Context) {
 		status := StatusUpdate{}
 
-    // Check if validation is required
-    validationRequired, _ := c.Get("validationRequired")
+		// Parse the JSON payload
+		if err := c.ShouldBindJSON(&status); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 
-    if validationRequired.(bool) {
-        if err := c.ShouldBindJSON(&status); err != nil {
-            c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-            return
-        }
-    } else {
-        // No validation required, simply parse the JSON
-        if err := c.ShouldBindJSON(&status); err != nil {
-            // Handle the error or validation as needed for non-validated fields
-        }
-    }
+		// Ensure that the 'body' field is provided
+		if status.Body == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "The 'body' field is required."})
+			return
+		}
+
+		// Set the 'created_time' to the current time
+		status.CreatedTime = time.Now()
 
 		// Check if 'updated_time' and 'location' are nil and set to default values if they are
 		if status.UpdatedTime == nil {
@@ -148,7 +146,7 @@ func main() {
 		})
 	})
 
-	r.POST("/updateStatus", func(c *gin.Context) {
+	r.POST("/update", func(c *gin.Context) {
 		// Parse the status ID from the query parameter
 		statusID := c.Query("id")
 
@@ -176,13 +174,13 @@ func main() {
 			existingStatus.Body = updatePayload.Body
 		}
 
-		if updatePayload.UpdatedTime != nil {
-			existingStatus.UpdatedTime = updatePayload.UpdatedTime
-		}
-
 		if updatePayload.Location != nil {
 			existingStatus.Location = updatePayload.Location
 		}
+
+		// Set the 'updatedTime' to the current time
+		updatedTime := time.Now()
+		existingStatus.UpdatedTime = &updatedTime
 
 		// Update the status entry in the database
 		_, updateErr := db.Exec(`
@@ -205,29 +203,4 @@ func main() {
 	})
 
 	r.Run(host)
-}
-
-
-func conditionalValidationMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-			endpoint := c.FullPath()
-
-			var validationRequired bool
-			switch endpoint {
-			case "/updateStatus":
-					// Validation is required for the update endpoint
-					validationRequired = true
-			case "/create":
-					// Validation is required for the create endpoint
-					validationRequired = true
-			default:
-					// No validation required for other endpoints
-					validationRequired = false
-			}
-
-			// Store the validation flag in the context
-			c.Set("validationRequired", validationRequired)
-
-			c.Next()
-	}
 }
