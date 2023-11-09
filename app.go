@@ -15,9 +15,9 @@ import (
 
 type StatusUpdate struct {
 	ID          int        `json:"id"`
-	Body        string     `json:"body" binding:"required"`
+	Body        string     `json:"body"`
 	UpdatedTime *time.Time `json:"updated_time"`
-	CreatedTime time.Time  `json:"created_time" binding:"required"`
+	CreatedTime time.Time  `json:"created_time"`
 	Location    *string    `json:"location"`
 }
 
@@ -60,8 +60,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	log.Println("Database created successfully")
+
+	r.Use(conditionalValidationMiddleware())
 
 	r.GET("/updates", func(c *gin.Context) {
 		// Implement the logic to retrieve status updates from the database
@@ -98,11 +99,22 @@ func main() {
 	})
 
 	r.POST("/create", func(c *gin.Context) {
-		var status StatusUpdate
-		if err := c.ShouldBindJSON(&status); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
+		status := StatusUpdate{}
+
+    // Check if validation is required
+    validationRequired, _ := c.Get("validationRequired")
+
+    if validationRequired.(bool) {
+        if err := c.ShouldBindJSON(&status); err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+            return
+        }
+    } else {
+        // No validation required, simply parse the JSON
+        if err := c.ShouldBindJSON(&status); err != nil {
+            // Handle the error or validation as needed for non-validated fields
+        }
+    }
 
 		// Check if 'updated_time' and 'location' are nil and set to default values if they are
 		if status.UpdatedTime == nil {
@@ -136,10 +148,86 @@ func main() {
 		})
 	})
 
-	r.GET("/", func (c *gin.Context) {
-		c.Header("Content-Type", "text/html");
-		c.String(http.StatusOK, "<html><body><marquee>Hello World!</marquee></body></html>");
+	r.POST("/updateStatus", func(c *gin.Context) {
+		// Parse the status ID from the query parameter
+		statusID := c.Query("id")
+
+		// Retrieve the existing status entry from the database using the status ID
+		var existingStatus StatusUpdate
+		err := db.QueryRow("SELECT id, body, updated_time, created_time, location FROM status_updates WHERE id = ?", statusID).
+			Scan(&existingStatus.ID, &existingStatus.Body, &existingStatus.UpdatedTime, &existingStatus.CreatedTime, &existingStatus.Location)
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Status not found or error in database query"})
+			return
+		}
+
+		// Parse the payload from the request body
+		var updatePayload StatusUpdate
+		if err := c.ShouldBindJSON(&updatePayload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Update the existing status entry with values from the payload
+		// You may want to add checks to only update fields that are provided in the payload
+
+		if updatePayload.Body != "" {
+			existingStatus.Body = updatePayload.Body
+		}
+
+		if updatePayload.UpdatedTime != nil {
+			existingStatus.UpdatedTime = updatePayload.UpdatedTime
+		}
+
+		if updatePayload.Location != nil {
+			existingStatus.Location = updatePayload.Location
+		}
+
+		// Update the status entry in the database
+		_, updateErr := db.Exec(`
+				UPDATE status_updates
+				SET body = ?, updated_time = ?, location = ?
+				WHERE id = ?
+		`, existingStatus.Body, existingStatus.UpdatedTime, existingStatus.Location, statusID)
+
+		if updateErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": updateErr.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, existingStatus)
+	})
+
+	r.GET("/", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, "<html><body><marquee>Hello World!</marquee></body></html>")
 	})
 
 	r.Run(host)
+}
+
+
+func conditionalValidationMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+			endpoint := c.FullPath()
+
+			var validationRequired bool
+			switch endpoint {
+			case "/updateStatus":
+					// Validation is required for the update endpoint
+					validationRequired = true
+			case "/create":
+					// Validation is required for the create endpoint
+					validationRequired = true
+			default:
+					// No validation required for other endpoints
+					validationRequired = false
+			}
+
+			// Store the validation flag in the context
+			c.Set("validationRequired", validationRequired)
+
+			c.Next()
+	}
 }
