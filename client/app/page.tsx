@@ -6,8 +6,6 @@ import { Label } from "@recipes/label";
 import { BaseLink } from "@recipes/link";
 import { Stack } from "@recipes/stack";
 import { Textarea } from "@recipes/textarea";
-// import { revalidatePath } from "next/cache";
-// import { redirect } from "next/navigation";
 
 export default function Home() {
   async function submit(formData: FormData) {
