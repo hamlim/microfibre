@@ -1,9 +1,7 @@
-# go-example
+# Microfibre
 
-A minimal Go application for [fly.io Getting Started](https://fly.io/docs/getting-started/golang/) documentation and tutorials.
+A bare bones Go-based API (using Gin + SQLite) for creating, updating, and
+reading status updates.
 
-To get started:
-
-1. clone this repo
-2. `flyctl launch`
-3. view the deployed app with flyctl open
+Think of it as a poor-mans Twitter. No social validation, no fancy features,
+just a stream of updates!
