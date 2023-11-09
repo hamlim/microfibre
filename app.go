@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"strconv"
 
 	"net/http"
 
 	"time"
+
+	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
@@ -21,9 +24,47 @@ type StatusUpdate struct {
 	Location    *string    `json:"location"`
 }
 
+func TokenMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Check if the 'secret-token' header is present in the request
+		secretToken := c.GetHeader("secret-token")
+
+		if secretToken == "" {
+			// Return an error response for unauthorized requests
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized. Please open an issue if you'd like to be added as a supported client!"})
+			c.Abort()
+			return
+		}
+
+		apiVersion := c.GetHeader("api-version")
+
+		if apiVersion != "v1" {
+			// Return an error response for unauthorized requests
+			c.JSON(http.StatusHTTPVersionNotSupported, gin.H{"error": "Unsupported API version requested."})
+			c.Abort()
+			return
+		}
+
+		// Continue processing the request if the header is present
+		c.Next()
+	}
+}
+
 func main() {
 
 	r := gin.Default()
+
+	// Create a CORS middleware instance with your desired configuration
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"*"}
+	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type"}
+	config.AllowCredentials = true
+
+	// Use the configured middleware
+	r.Use(cors.New(config))
+
+	r.Use(TokenMiddleware())
 
 	// Get the database file path from the environment variable
 	dbFilePath := os.Getenv("DB_FILE_PATH")
@@ -62,9 +103,29 @@ func main() {
 	}
 	log.Println("Database created successfully")
 
-	r.GET("/read", func(c *gin.Context) {
-		// Implement the logic to retrieve status updates from the database
-		rows, err := db.Query("SELECT id, body, updated_time, created_time, location FROM status_updates")
+	r.GET("/v1/read", func(c *gin.Context) {
+		// Extract query parameters for pagination
+		page := c.DefaultQuery("page", "1")
+		pageSize := c.DefaultQuery("pageSize", "10")
+
+		// Parse the page and pageSize as integers
+		pageInt, err := strconv.Atoi(page)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+			return
+		}
+		pageSizeInt, err := strconv.Atoi(pageSize)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page size"})
+			return
+		}
+
+		// Calculate the offset based on page and pageSize
+		offset := (pageInt - 1) * pageSizeInt
+
+		// Adjust your SQL query to retrieve a specific page of results
+		query := "SELECT id, body, updated_time, created_time, location FROM status_updates LIMIT ? OFFSET ?"
+		rows, err := db.Query(query, pageSizeInt, offset)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -93,10 +154,17 @@ func main() {
 			statusUpdates = append(statusUpdates, status)
 		}
 
+		totalCount, err := getTotalRecordCount(db)
+		if err != nil {
+			log.Printf("Failed to calculate the total number of records!")
+		}
+
+		c.Writer.Header().Set("X-Total-Count", strconv.Itoa(totalCount))
+
 		c.JSON(http.StatusOK, statusUpdates)
 	})
 
-	r.POST("/create", func(c *gin.Context) {
+	r.POST("/v1/create", func(c *gin.Context) {
 		status := StatusUpdate{}
 
 		// Parse the JSON payload
@@ -146,7 +214,7 @@ func main() {
 		})
 	})
 
-	r.POST("/update", func(c *gin.Context) {
+	r.POST("/v1/update", func(c *gin.Context) {
 		// Parse the status ID from the query parameter
 		statusID := c.Query("id")
 
@@ -203,4 +271,14 @@ func main() {
 	})
 
 	r.Run(host)
+}
+
+func getTotalRecordCount(db *sql.DB) (int, error) {
+	query := "SELECT COUNT(*) FROM status_updates"
+	var totalCount int
+	err := db.QueryRow(query).Scan(&totalCount)
+	if err != nil {
+		return 0, err
+	}
+	return totalCount, nil
 }
