@@ -6,12 +6,12 @@ import { Label } from "@recipes/label";
 import { BaseLink } from "@recipes/link";
 import { Stack } from "@recipes/stack";
 import { Textarea } from "@recipes/textarea";
+// import { revalidatePath } from "next/cache";
+// import { redirect } from "next/navigation";
 
 export default function Home() {
   async function submit(formData: FormData) {
     "use server";
-
-    console.log(formData);
 
     let body = formData.get("body");
     let location = formData.get("location");
@@ -40,6 +40,7 @@ export default function Home() {
       method: "POST",
       body: JSON.stringify(payload),
     });
+    // redirect("/");
   }
   return (
     <main className="p-10">
@@ -52,7 +53,6 @@ export default function Home() {
             <Stack gap={10}>
               <Heading is="h3">Add Update:</Heading>
               <form action={submit}>
-                {/* <Form /> */}
                 <Stack gap={10}>
                   <div className="grid w-full items-center gap-4">
                     <Label htmlFor="body">Update</Label>
