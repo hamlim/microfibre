@@ -63,7 +63,7 @@ func main() {
 
 	log.Println("Database created successfully")
 
-	r.GET("/status_updates", func(c *gin.Context) {
+	r.GET("/updates", func(c *gin.Context) {
 		// Implement the logic to retrieve status updates from the database
 		rows, err := db.Query("SELECT id, body, updated_time, created_time, location FROM status_updates")
 		if err != nil {
@@ -97,7 +97,7 @@ func main() {
 		c.JSON(http.StatusOK, statusUpdates)
 	})
 
-	r.POST("/status_updates", func(c *gin.Context) {
+	r.POST("/create", func(c *gin.Context) {
 		var status StatusUpdate
 		if err := c.ShouldBindJSON(&status); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
