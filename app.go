@@ -16,12 +16,23 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type StatusUpdate struct {
-	ID          int        `json:"id"`
-	Body        string     `json:"body"`
-	UpdatedTime *time.Time `json:"updated_time"`
-	CreatedTime time.Time  `json:"created_time"`
-	Location    *string    `json:"location"`
+// Media struct to represent images or videos
+type Media struct {
+	Type  string `json:"type"`  // "image" or "video"
+	URL   string `json:"url"`   // Source URL for the media
+	Title string `json:"title"` // Optional title for the media
+}
+
+// Updated Post struct with media field
+type Post struct {
+	ID              int        `json:"id"`
+	Body            string     `json:"body"`
+	UpdatedTime     *time.Time `json:"updated_time"`
+	UpdatedTimezone string     `json:"updated_timezone"`
+	CreatedTime     time.Time  `json:"created_time"`
+	CreatedTimezone string     `json:"created_timezone"`
+	Location        *string    `json:"location"`
+	Media           []Media    `json:"media"`
 }
 
 func TokenMiddleware() gin.HandlerFunc {
@@ -90,20 +101,31 @@ func main() {
 
 	// Create a table for status updates
 	_, err = db.Exec(`
-	CREATE TABLE IF NOT EXISTS status_updates (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		body TEXT,
-		updated_time DATETIME,
-		created_time DATETIME,
-		location TEXT
-)
+	CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    body TEXT,
+    updated_time DATETIME,
+    updated_timezone TEXT NULL,
+    created_time DATETIME,
+    created_timezone TEXT,
+    location TEXT
+);
+
+CREATE TABLE IF NOT EXISTS media (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	post_id INTEGER,
+	type TEXT,
+	url TEXT,
+	title TEXT,
+	FOREIGN KEY (post_id) REFERENCES posts (id)
+);
     `)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Database created successfully")
+	log.Println("Database tables created successfully")
 
-	r.GET("/v1/read", func(c *gin.Context) {
+	r.GET("/v1/posts", func(c *gin.Context) {
 		// Extract query parameters for pagination
 		page := c.DefaultQuery("page", "1")
 		pageSize := c.DefaultQuery("pageSize", "10")
@@ -124,7 +146,7 @@ func main() {
 		offset := (pageInt - 1) * pageSizeInt
 
 		// Adjust your SQL query to retrieve a specific page of results
-		query := "SELECT id, body, updated_time, created_time, location FROM status_updates LIMIT ? OFFSET ?"
+		query := "SELECT id, body, updated_time, updated_timezone, created_time, created_timezone, location FROM posts ORDER BY created_time DESC LIMIT ? OFFSET ?"
 		rows, err := db.Query(query, pageSizeInt, offset)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -132,26 +154,48 @@ func main() {
 		}
 		defer rows.Close()
 
-		var statusUpdates []StatusUpdate
+		var posts []Post
 		for rows.Next() {
-			var status StatusUpdate
+			var post Post
 			var updatedTime, createdTime sql.NullTime
+			var updatedTimezone, createdTimezone sql.NullString
 			var location sql.NullString
 
-			if err := rows.Scan(&status.ID, &status.Body, &updatedTime, &createdTime, &location); err != nil {
+			if err := rows.Scan(&post.ID, &post.Body, &updatedTime, &updatedTimezone, &createdTime, &createdTimezone, &location); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
 			if updatedTime.Valid {
-				status.UpdatedTime = &updatedTime.Time
+				post.UpdatedTime = &updatedTime.Time
+				post.UpdatedTimezone = updatedTimezone.String
 			}
-			status.CreatedTime = createdTime.Time
+			post.CreatedTime = createdTime.Time
+			post.CreatedTimezone = createdTimezone.String
 			if location.Valid {
-				status.Location = &location.String
+				post.Location = &location.String
 			}
 
-			statusUpdates = append(statusUpdates, status)
+			// Fetch media for the current post
+			mediaRows, err := db.Query("SELECT type, url, title FROM media WHERE post_id = ?", post.ID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer mediaRows.Close()
+
+			var media []Media
+			for mediaRows.Next() {
+				var m Media
+				if err := mediaRows.Scan(&m.Type, &m.URL, &m.Title); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				media = append(media, m)
+			}
+
+			post.Media = media
+			posts = append(posts, post)
 		}
 
 		totalCount, err := getTotalRecordCount(db)
@@ -161,108 +205,177 @@ func main() {
 
 		c.Writer.Header().Set("X-Total-Count", strconv.Itoa(totalCount))
 
-		c.JSON(http.StatusOK, statusUpdates)
+		c.JSON(http.StatusOK, posts)
 	})
 
-	r.POST("/v1/create", func(c *gin.Context) {
-		status := StatusUpdate{}
-
+	r.POST("/v1/post", func(c *gin.Context) {
 		// Parse the JSON payload
-		if err := c.ShouldBindJSON(&status); err != nil {
+		var post Post
+		if err := c.ShouldBindJSON(&post); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
 		// Ensure that the 'body' field is provided
-		if status.Body == "" {
+		if post.Body == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "The 'body' field is required."})
 			return
 		}
 
-		// Set the 'created_time' to the current time
-		status.CreatedTime = time.Now()
+		// Set the 'created_time' to the current time with the provided timezone
+		post.CreatedTime = time.Now()
 
-		// Check if 'updated_time' and 'location' are nil and set to default values if they are
-		if status.UpdatedTime == nil {
-			defaultTime := time.Now()
-			status.UpdatedTime = &defaultTime
-		}
-		if status.Location == nil {
-			status.Location = nil // You can omit this line, as it's already nil by default
+		if post.Location == nil {
+			post.Location = nil // You can omit this line, as it's already nil by default
 		}
 
-		// Insert the new status update into the database
+		// Insert the new post into the database
 		result, err := db.Exec(`
-            INSERT INTO status_updates (body, updated_time, created_time, location)
-            VALUES (?, ?, ?, ?)
-        `, status.Body, status.UpdatedTime, status.CreatedTime, status.Location)
+        INSERT INTO posts (body, updated_time, updated_timezone, created_time, created_timezone, location)
+        VALUES (?, NULL, NULL, ?, ?, ?)
+    `, post.Body, post.CreatedTime, post.CreatedTimezone, post.Location)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		// Get the ID of the newly inserted status update
-		id, err := result.LastInsertId()
+		// Get the ID of the newly inserted post
+		postID, err := result.LastInsertId()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+
+		// Insert media entries into the database
+		for _, media := range post.Media {
+			_, err := db.Exec(`
+            INSERT INTO media (post_id, type, url, title)
+            VALUES (?, ?, ?, ?)
+        `, postID, media.Type, media.URL, media.Title)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
 		c.JSON(http.StatusCreated, gin.H{
-			"message": "Status update created",
-			"id":      id,
+			"message": "Post created",
+			"id":      postID,
 		})
 	})
 
 	r.POST("/v1/update", func(c *gin.Context) {
-		// Parse the status ID from the query parameter
-		statusID := c.Query("id")
-
-		// Retrieve the existing status entry from the database using the status ID
-		var existingStatus StatusUpdate
-		err := db.QueryRow("SELECT id, body, updated_time, created_time, location FROM status_updates WHERE id = ?", statusID).
-			Scan(&existingStatus.ID, &existingStatus.Body, &existingStatus.UpdatedTime, &existingStatus.CreatedTime, &existingStatus.Location)
-
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Status not found or error in database query"})
-			return
-		}
-
 		// Parse the payload from the request body
-		var updatePayload StatusUpdate
+		var updatePayload gin.H
 		if err := c.ShouldBindJSON(&updatePayload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		// Update the existing status entry with values from the payload
+		// Ensure that the post ID is provided in the payload
+		postID, ok := updatePayload["id"].(float64)
+		if !ok || postID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "The 'id' field is required in the payload."})
+			return
+		}
+
+		// Retrieve the existing post entry from the database using the post ID
+		var existingPost Post
+		err := db.QueryRow("SELECT id, body, updated_time, created_time, created_timezone, location FROM posts WHERE id = ?", int(postID)).
+			Scan(&existingPost.ID, &existingPost.Body, &existingPost.UpdatedTime, &existingPost.CreatedTime, &existingPost.CreatedTimezone, &existingPost.Location)
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Post not found or error in database query", "details": err.Error()})
+			return
+		}
+
+		// Handle NULL value for updated_timezone
+		var updatedTimezone sql.NullString
+		err = db.QueryRow("SELECT updated_timezone FROM posts WHERE id = ?", int(postID)).Scan(&updatedTimezone)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Error retrieving updated_timezone", "details": err.Error()})
+			return
+		}
+		existingPost.UpdatedTimezone = updatedTimezone.String
+
+		// Update the existing post entry with values from the payload
 		// You may want to add checks to only update fields that are provided in the payload
 
-		if updatePayload.Body != "" {
-			existingStatus.Body = updatePayload.Body
+		if body, ok := updatePayload["body"].(string); ok {
+			existingPost.Body = body
 		}
 
-		if updatePayload.Location != nil {
-			existingStatus.Location = updatePayload.Location
+		if location, ok := updatePayload["location"].(string); ok {
+			existingPost.Location = &location
 		}
 
-		// Set the 'updatedTime' to the current time
-		updatedTime := time.Now()
-		existingStatus.UpdatedTime = &updatedTime
+		if media, ok := updatePayload["media"]; ok {
+			// Ensure that 'media' is not nil before attempting to convert
+			if mediaArray, isArray := media.([]interface{}); isArray {
+				existingPost.Media = make([]Media, len(mediaArray))
+				for i, m := range mediaArray {
+					mediaMap, ok := m.(map[string]interface{})
+					if !ok {
+						c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid media format in payload"})
+						return
+					}
+					mediaType, _ := mediaMap["type"].(string)
+					mediaURL, _ := mediaMap["url"].(string)
+					mediaTitle, _ := mediaMap["title"].(string)
+					existingPost.Media[i] = Media{
+						Type:  mediaType,
+						URL:   mediaURL,
+						Title: mediaTitle,
+					}
+				}
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid media format in payload"})
+				return
+			}
+		}
 
-		// Update the status entry in the database
+		// Set the 'updatedTime' and 'updatedTimezone' to the current time and provided timezone
+		currentTime := time.Now()
+		existingPost.UpdatedTime = &currentTime
+		existingPost.UpdatedTimezone = updatePayload["updated_timezone"].(string)
+
+		// Delete existing media entries associated with the post
+		_, deleteErr := db.Exec(`
+DELETE FROM media
+WHERE post_id = ?
+`, existingPost.ID)
+
+		if deleteErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": deleteErr.Error()})
+			return
+		}
+
+		// Insert new media entries from the update payload
+		for _, media := range existingPost.Media {
+			_, insertErr := db.Exec(`
+INSERT INTO media (type, url, title, post_id)
+VALUES (?, ?, ?, ?)
+`, media.Type, media.URL, media.Title, existingPost.ID)
+
+			if insertErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": insertErr.Error()})
+				return
+			}
+		}
+
+		// Now, update the post entry in the posts table
 		_, updateErr := db.Exec(`
-				UPDATE status_updates
-				SET body = ?, updated_time = ?, location = ?
-				WHERE id = ?
-		`, existingStatus.Body, existingStatus.UpdatedTime, existingStatus.Location, statusID)
+UPDATE posts
+SET body = ?, updated_time = ?, updated_timezone = ?, location = ?
+WHERE id = ?
+`, existingPost.Body, existingPost.UpdatedTime, existingPost.UpdatedTimezone, existingPost.Location, existingPost.ID)
 
 		if updateErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": updateErr.Error()})
 			return
 		}
 
-		c.JSON(http.StatusOK, existingStatus)
+		c.JSON(http.StatusOK, existingPost)
 	})
 
 	r.GET("/", func(c *gin.Context) {
@@ -274,7 +387,7 @@ func main() {
 }
 
 func getTotalRecordCount(db *sql.DB) (int, error) {
-	query := "SELECT COUNT(*) FROM status_updates"
+	query := "SELECT COUNT(*) FROM posts"
 	var totalCount int
 	err := db.QueryRow(query).Scan(&totalCount)
 	if err != nil {

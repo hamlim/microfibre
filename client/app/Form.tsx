@@ -25,6 +25,12 @@ export function Form({ action }: { action: any }) {
           <Label htmlFor="location">Location</Label>
           <Input type="text" id="location" name="location" placeholder="Location" />
         </div>
+        {
+          /* <div className="grid w-full items-center gap-4">
+          <Label htmlFor="media">Media</Label>
+          <Input id="media" name="media" multiple accept="image/*,video/*" type="file" />
+        </div> */
+        }
         <Button
           variant="outline"
           type="submit"

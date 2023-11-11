@@ -2,54 +2,24 @@ import { Container } from "@recipes/container";
 import { Heading } from "@recipes/heading";
 import { BaseLink } from "@recipes/link";
 import { Stack } from "@recipes/stack";
+import { submit } from "./action";
 import { Form } from "./Form";
 
 export default function Home() {
-  async function submit(formData: FormData) {
-    "use server";
-
-    let body = formData.get("body");
-    let location = formData.get("location");
-
-    if (!body || typeof body !== "string") {
-      throw new Error("Missing body in status update!");
-    }
-
-    let payload: { body: string; location?: string } = { body: body as string };
-    if (typeof location === "string" && location.length) {
-      payload.location = location;
-    }
-
-    let endpoint;
-    if (process.env.NODE_ENV === "development") {
-      endpoint = "http://127.0.0.1:8080/v1/create";
-    } else {
-      endpoint = "https://microfibre-v1.fly.dev/v1/create";
-    }
-
-    await fetch(endpoint, {
-      headers: new Headers({
-        "secret-token": "yoloswag",
-        "api-version": "v1",
-      }),
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-  }
   return (
     <main className="p-10">
       <Container>
         <Stack gap={10}>
-          <header>
+          <header className="text-center">
             <Heading is="h1">microfibre</Heading>
           </header>
           <article className="max-w-[70ch] min-w-full md:min-w-[70ch] mx-auto">
             <Stack gap={10}>
-              <Heading is="h3">Add Update:</Heading>
+              <Heading is="h3">New Post:</Heading>
               <Form action={submit} />
             </Stack>
           </article>
-          <footer>
+          <footer className="text-center">
             Made by <BaseLink href="https://matthamlin.me">Matt Hamlin</BaseLink>
           </footer>
         </Stack>
