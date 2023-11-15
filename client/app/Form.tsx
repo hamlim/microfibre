@@ -4,10 +4,17 @@ import { Input } from "@recipes/input";
 import { Label } from "@recipes/label";
 import { Stack } from "@recipes/stack";
 import { Textarea } from "@recipes/textarea";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function Form({ action }: { action: any }) {
   let formRef = useRef<HTMLFormElement | null>(null);
+
+  let [timeZone, setTimeZone] = useState<string>("");
+
+  useEffect(() => {
+    setTimeZone(new Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
+
   return (
     <form
       action={async (formData) => {
@@ -16,6 +23,7 @@ export function Form({ action }: { action: any }) {
       }}
       ref={formRef}
     >
+      <input className="hidden" name="timezone" id="timezone" value={timeZone} readOnly />
       <Stack gap={10}>
         <div className="grid w-full items-center gap-4">
           <Label htmlFor="body">Update</Label>
