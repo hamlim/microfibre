@@ -88,7 +88,7 @@ export async function submit(formData: FormData) {
   if (process.env.NODE_ENV === "development") {
     endpoint = "http://127.0.0.1:8080/v1/post";
   } else {
-    endpoint = "https://microfibre-v1.fly.dev/v1/post";
+    endpoint = "http://microfibre-v1.fly.dev/v1/post";
   }
 
   await fetch(endpoint, {
