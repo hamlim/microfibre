@@ -11,7 +11,6 @@ type Media = {
 
 type Payload = {
   body: string;
-  created_time: string;
   created_timezone: string;
   location?: string;
   media?: Array<Media>;
@@ -73,7 +72,6 @@ export async function submit(formData: FormData) {
 
   let payload: Payload = {
     body: body as string,
-    created_time: new Date().toISOString(),
     created_timezone: timezone as string,
   };
   if (typeof location === "string" && location.length) {
@@ -86,15 +84,14 @@ export async function submit(formData: FormData) {
 
   let endpoint;
   if (process.env.NODE_ENV === "development") {
-    endpoint = "http://127.0.0.1:8080/v1/post";
+    endpoint = "http://127.0.0.1:8787/v1/post";
   } else {
-    endpoint = "http://microfibre-v1.fly.dev/v1/post";
+    endpoint = "https://microfibre-api.mhamlin.workers.dev/v1/post";
   }
 
   await fetch(endpoint, {
     headers: new Headers({
-      "secret-token": "yoloswag",
-      "api-version": "v1",
+      "x-auth-token": "yolo-swag",
     }),
     method: "POST",
     body: JSON.stringify(payload),
