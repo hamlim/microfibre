@@ -125,6 +125,70 @@ async function handlePostsRequest(request: Request, env: Env): Promise<Response>
   }
 }
 
+async function handleUpdateRequest(request: Request, env: Env): Promise<Response> {
+  try {
+    const { postId, body, location, updated_timezone } = await request.json<{ postId: number; body?: string; location?: string; updated_timezone: string; }>();
+
+		if (!postId || !updated_timezone) {
+			return new Response(JSON.stringify({
+				status: 'failure',
+				error: 'Missing `postId` or `updated_timezone` in the payload!'
+			}), {
+        status: 500,
+        headers: new Headers({ 'content-type': 'application/json' }),
+      });
+		}
+
+    // Check if the post exists
+    const selectStatement = await env.DB.prepare(`
+      SELECT *
+      FROM posts
+      WHERE id = ?1
+    `).bind(postId);
+    const post = await selectStatement.first();
+
+    if (!post) {
+      const responseJson = {
+        status: 'failure',
+        error: 'Post not found',
+      };
+
+      return new Response(JSON.stringify(responseJson), {
+        status: 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+      });
+    }
+
+    // Update the post
+    const updateStatement = await env.DB.prepare(`
+      UPDATE posts
+      SET body = ?1, location = ?2, updated_timezone = ?3, updated_time = ?4
+      WHERE id = ?5
+    `).bind(body || post.body, location || post.location, updated_timezone, Date.now(), postId);
+    await updateStatement.run();
+
+    const responseJson = {
+      status: 'success',
+      postId: postId,
+    };
+
+    return new Response(JSON.stringify(responseJson), {
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+    });
+  } catch (error) {
+    const responseJson = {
+      status: 'failure',
+      error: (error as Error).message,
+    };
+
+    return new Response(JSON.stringify(responseJson), {
+      status: 500,
+      headers: new Headers({ 'content-type': 'application/json' }),
+    });
+  }
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		let {method} = request;
@@ -135,6 +199,9 @@ export default {
 				switch (pathname) {
 					case '/v1/post': {
 						return protect(request, env)(() => handlePostRequest(request, env));
+					}
+					case '/v1/update': {
+						return protect(request, env)(() => handleUpdateRequest(request, env))
 					}
 				}
 			}
